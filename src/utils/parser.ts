@@ -16,6 +16,9 @@ function isTabularFormat(text: string): boolean {
   return text.includes('MLING') || 
          text.includes('MLHUM') || 
          text.includes('MLECE') ||
+         text.includes('MLEXING') ||
+         text.includes('MLESD') ||
+         text.includes('MLIN') ||
          text.includes('UPANA') ||
          (text.includes('Code') && text.includes('Title') && text.includes('Schedule'));
 }
