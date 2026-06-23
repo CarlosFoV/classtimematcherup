@@ -12,7 +12,7 @@ type AppStep = 'input' | 'select' | 'view';
 const Index = () => {
   const [step, setStep] = useState<AppStep>('input');
   const [groupedClasses, setGroupedClasses] = useState<GroupedClasses>({});
-  const [selectedSubjects, setSelectedSubjects] = useState<string[]>([]);
+  const [selectedCrns, setSelectedCrns] = useState<string[]>([]);
   const [schedules, setSchedules] = useState<ScheduleCombination[]>([]);
 
   const handleTextParsed = (text: string) => {
@@ -28,19 +28,20 @@ const Index = () => {
     });
     
     setGroupedClasses(grouped);
-    setSelectedSubjects([]);
+    setSelectedCrns([]);
     setStep('select');
   };
 
-  const handleSelectionChange = (subjects: string[]) => {
-    setSelectedSubjects(subjects);
+  const handleSelectionChange = (crns: string[]) => {
+    setSelectedCrns(crns);
   };
 
   const handleGenerateSchedules = () => {
-    // Obtener todas las clases de las materias seleccionadas
-    const selectedClasses = selectedSubjects.flatMap(subject => 
-      groupedClasses[subject] || []
-    );
+    // Obtener únicamente las secciones (CRN) seleccionadas
+    const crnSet = new Set(selectedCrns);
+    const selectedClasses = Object.values(groupedClasses)
+      .flat()
+      .filter(cls => crnSet.has(cls.crn));
     
     const combinations = generateScheduleCombinations(selectedClasses);
     setSchedules(combinations);

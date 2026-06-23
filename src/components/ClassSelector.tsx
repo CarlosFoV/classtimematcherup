@@ -10,24 +10,35 @@ import { CheckCircle, Clock, MapPin, User, Users, ArrowLeft, Search } from 'luci
 
 interface ClassSelectorProps {
   groupedClasses: GroupedClasses;
-  onSelectionChange: (selectedSubjects: string[]) => void;
+  onSelectionChange: (selectedCrns: string[]) => void;
   onGenerateSchedules: () => void;
   onBack: () => void;
 }
 
 export function ClassSelector({ groupedClasses, onSelectionChange, onGenerateSchedules, onBack }: ClassSelectorProps) {
-  const [selectedSubjects, setSelectedSubjects] = useState<string[]>([]);
+  const [selectedCrns, setSelectedCrns] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
 
-  const handleSubjectToggle = (materia: string, checked: boolean) => {
-    let newSelected: string[];
-    if (checked) {
-      newSelected = [...selectedSubjects, materia];
-    } else {
-      newSelected = selectedSubjects.filter(s => s !== materia);
-    }
-    setSelectedSubjects(newSelected);
+  const updateSelection = (newSelected: string[]) => {
+    setSelectedCrns(newSelected);
     onSelectionChange(newSelected);
+  };
+
+  const handleSectionToggle = (crn: string, checked: boolean) => {
+    updateSelection(
+      checked
+        ? [...selectedCrns, crn]
+        : selectedCrns.filter(c => c !== crn)
+    );
+  };
+
+  const handleSubjectToggle = (classes: Class[], checked: boolean) => {
+    const crns = classes.map(c => c.crn);
+    updateSelection(
+      checked
+        ? Array.from(new Set([...selectedCrns, ...crns]))
+        : selectedCrns.filter(c => !crns.includes(c))
+    );
   };
 
   // Filter subjects based on search query
@@ -35,8 +46,16 @@ export function ClassSelector({ groupedClasses, onSelectionChange, onGenerateSch
     materia.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const selectedCount = selectedSubjects.length;
-  const subjectCount = Object.keys(groupedClasses).length;
+  const selectedCount = selectedCrns.length;
+  const selectedSubjectCount = filteredSubjects.filter(([, classes]) =>
+    classes.some(c => selectedCrns.includes(c.crn))
+  ).length;
+  const getSubjectState = (classes: Class[]): boolean | 'indeterminate' => {
+    const selectedInSubject = classes.filter(c => selectedCrns.includes(c.crn)).length;
+    if (selectedInSubject === 0) return false;
+    if (selectedInSubject === classes.length) return true;
+    return 'indeterminate';
+  };
 
   return (
     <div className="w-full max-w-6xl mx-auto space-y-6">
@@ -64,8 +83,10 @@ export function ClassSelector({ groupedClasses, onSelectionChange, onGenerateSch
               </div>
             </div>
             <div className="text-right">
-              <div className="text-2xl font-bold text-primary">{selectedCount}</div>
-              <div className="text-sm text-muted-foreground">materias seleccionadas</div>
+              <div className="text-2xl font-bold text-primary">{selectedSubjectCount}</div>
+              <div className="text-sm text-muted-foreground">
+                {selectedCount} horario{selectedCount !== 1 ? 's' : ''} seleccionado{selectedCount !== 1 ? 's' : ''}
+              </div>
             </div>
           </div>
           
@@ -88,9 +109,9 @@ export function ClassSelector({ groupedClasses, onSelectionChange, onGenerateSch
                   <div className="flex items-start space-x-3">
                     <Checkbox
                       id={materia}
-                      checked={selectedSubjects.includes(materia)}
-                      onCheckedChange={(checked) => 
-                        handleSubjectToggle(materia, checked as boolean)
+                      checked={getSubjectState(classes)}
+                      onCheckedChange={(checked) =>
+                        handleSubjectToggle(classes, checked === true)
                       }
                       className="mt-1"
                     />
@@ -101,50 +122,74 @@ export function ClassSelector({ groupedClasses, onSelectionChange, onGenerateSch
                           <Users className="h-3 w-3" />
                           {classes.length} secciones disponibles
                         </Badge>
+                        {classes.some(c => selectedCrns.includes(c.crn)) && (
+                          <Badge variant="default" className="gap-1">
+                            {classes.filter(c => selectedCrns.includes(c.crn)).length} seleccionada
+                            {classes.filter(c => selectedCrns.includes(c.crn)).length !== 1 ? 's' : ''}
+                          </Badge>
+                        )}
                       </div>
                     </div>
                   </div>
                 </CardHeader>
                 
                 <CardContent className="space-y-3">
-                  {classes.map((cls) => (
-                    <div
+                  {classes.map((cls) => {
+                    const isSelected = selectedCrns.includes(cls.crn);
+                    return (
+                    <label
                       key={cls.crn}
-                      className="p-4 rounded-lg border border-border bg-muted/30"
+                      htmlFor={`crn-${cls.crn}`}
+                      className={`flex items-start gap-3 p-4 rounded-lg border cursor-pointer transition-colors ${
+                        isSelected
+                          ? 'border-primary bg-primary/5'
+                          : 'border-border bg-muted/30 hover:border-primary/40'
+                      }`}
                     >
-                      <div className="flex flex-wrap items-center gap-2 mb-2">
-                        <Badge variant="outline" className="font-mono">
-                          CRN: {cls.crn}
-                        </Badge>
-                        <Badge variant="secondary">
-                          {cls.grupo}
-                        </Badge>
-                        <Badge 
-                          variant={cls.modalidad === 'Presencial' ? 'default' : 'outline'}
-                          className="gap-1"
-                        >
-                          {cls.modalidad}
-                        </Badge>
-                      </div>
-                      
-                      <div className="grid sm:grid-cols-3 gap-3 text-sm">
-                        <div className="flex items-center gap-2 text-muted-foreground">
-                          <Clock className="h-4 w-4" />
-                          <span>{cls.dias.join(', ')} {cls.horaInicio} - {cls.horaFin}</span>
+                      <Checkbox
+                        id={`crn-${cls.crn}`}
+                        checked={isSelected}
+                        onCheckedChange={(checked) =>
+                          handleSectionToggle(cls.crn, checked === true)
+                        }
+                        className="mt-1"
+                      />
+                      <div className="flex-1">
+                        <div className="flex flex-wrap items-center gap-2 mb-2">
+                          <Badge variant="outline" className="font-mono">
+                            CRN: {cls.crn}
+                          </Badge>
+                          <Badge variant="secondary">
+                            {cls.grupo}
+                          </Badge>
+                          <Badge 
+                            variant={cls.modalidad === 'Presencial' ? 'default' : 'outline'}
+                            className="gap-1"
+                          >
+                            {cls.modalidad}
+                          </Badge>
                         </div>
                         
-                        <div className="flex items-center gap-2 text-muted-foreground">
-                          <MapPin className="h-4 w-4" />
-                          <span>{cls.aula}</span>
-                        </div>
-                        
-                        <div className="flex items-center gap-2 text-muted-foreground">
-                          <User className="h-4 w-4" />
-                          <span className="truncate">{cls.profesor}</span>
+                        <div className="grid sm:grid-cols-3 gap-3 text-sm">
+                          <div className="flex items-center gap-2 text-muted-foreground">
+                            <Clock className="h-4 w-4" />
+                            <span>{cls.dias.join(', ')} {cls.horaInicio} - {cls.horaFin}</span>
+                          </div>
+                          
+                          <div className="flex items-center gap-2 text-muted-foreground">
+                            <MapPin className="h-4 w-4" />
+                            <span>{cls.aula}</span>
+                          </div>
+                          
+                          <div className="flex items-center gap-2 text-muted-foreground">
+                            <User className="h-4 w-4" />
+                            <span className="truncate">{cls.profesor}</span>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  ))}
+                    </label>
+                    );
+                  })}
                 </CardContent>
               </Card>
             ))}
@@ -163,10 +208,10 @@ export function ClassSelector({ groupedClasses, onSelectionChange, onGenerateSch
               <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
                 <div className="text-center sm:text-left">
                   <p className="font-medium text-primary">
-                    {selectedCount} materias seleccionadas
+                    {selectedSubjectCount} materia{selectedSubjectCount !== 1 ? 's' : ''} · {selectedCount} horario{selectedCount !== 1 ? 's' : ''}
                   </p>
                   <p className="text-sm text-muted-foreground">
-                    El sistema generará todas las combinaciones de horarios posibles
+                    El sistema generará todas las combinaciones posibles con los horarios elegidos
                   </p>
                 </div>
                 
