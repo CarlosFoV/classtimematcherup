@@ -36,6 +36,23 @@ const Index = () => {
     setSelectedCrns(crns);
   };
 
+  const handleCompleteSchedule = (
+    crn: string,
+    update: { dias: string[]; horaInicio: string; horaFin: string }
+  ) => {
+    setGroupedClasses(prev => {
+      const next: GroupedClasses = {};
+      for (const [materia, classes] of Object.entries(prev)) {
+        next[materia] = classes.map(cls =>
+          cls.crn === crn
+            ? { ...cls, ...update, incompleteSchedule: false }
+            : cls
+        );
+      }
+      return next;
+    });
+  };
+
   const handleGenerateSchedules = () => {
     // Obtener únicamente las secciones (CRN) seleccionadas
     const crnSet = new Set(selectedCrns);
@@ -68,6 +85,7 @@ const Index = () => {
             groupedClasses={groupedClasses}
             onSelectionChange={handleSelectionChange}
             onGenerateSchedules={handleGenerateSchedules}
+            onCompleteSchedule={handleCompleteSchedule}
             onBack={handleBack}
           />
         )}

@@ -1,6 +1,7 @@
 
 import { useState } from 'react';
 import { Class, GroupedClasses } from '../types/schedule';
+import { parseScheduleSegments } from '../utils/parser';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Checkbox } from './ui/checkbox';
 import { Button } from './ui/button';
@@ -12,12 +13,44 @@ interface ClassSelectorProps {
   groupedClasses: GroupedClasses;
   onSelectionChange: (selectedCrns: string[]) => void;
   onGenerateSchedules: () => void;
+  onCompleteSchedule: (crn: string, update: { dias: string[]; horaInicio: string; horaFin: string }) => void;
   onBack: () => void;
 }
 
-export function ClassSelector({ groupedClasses, onSelectionChange, onGenerateSchedules, onBack }: ClassSelectorProps) {
+export function ClassSelector({ groupedClasses, onSelectionChange, onGenerateSchedules, onCompleteSchedule, onBack }: ClassSelectorProps) {
   const [selectedCrns, setSelectedCrns] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
+  const [editingCrn, setEditingCrn] = useState<string | null>(null);
+  const [editValue, setEditValue] = useState('');
+  const [editError, setEditError] = useState('');
+
+  const startEditing = (crn: string) => {
+    setEditingCrn(crn);
+    setEditValue('');
+    setEditError('');
+  };
+
+  const cancelEditing = () => {
+    setEditingCrn(null);
+    setEditValue('');
+    setEditError('');
+  };
+
+  const saveSchedule = (crn: string) => {
+    const segments = parseScheduleSegments(editValue);
+    if (segments.length === 0) {
+      setEditError('Formato no válido. Ej: MoWe 8:30AM - 9:59AM');
+      return;
+    }
+    // Unir todos los días detectados; usar el primer rango horario.
+    const dias = Array.from(new Set(segments.flatMap(s => s.dias)));
+    onCompleteSchedule(crn, {
+      dias,
+      horaInicio: segments[0].horaInicio,
+      horaFin: segments[0].horaFin,
+    });
+    cancelEditing();
+  };
 
   const updateSelection = (newSelected: string[]) => {
     setSelectedCrns(newSelected);
@@ -198,11 +231,72 @@ export function ClassSelector({ groupedClasses, onSelectionChange, onGenerateSch
                           </div>
                         </div>
 
-                        {cls.incompleteSchedule && (
-                          <p className="mt-2 text-xs text-amber-600">
-                            El portal recortó este horario; puede faltar otro día.
-                            Verifícalo antes de confiar en la combinación.
-                          </p>
+                        {cls.incompleteSchedule && editingCrn !== cls.crn && (
+                          <div className="mt-2 flex flex-col sm:flex-row sm:items-center gap-2">
+                            <p className="text-xs text-amber-600">
+                              El portal recortó este horario; puede faltar otro día.
+                            </p>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="h-7 gap-1 border-amber-500 text-amber-600 hover:bg-amber-500/10"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                startEditing(cls.crn);
+                              }}
+                            >
+                              Completar horario
+                            </Button>
+                          </div>
+                        )}
+
+                        {editingCrn === cls.crn && (
+                          <div
+                            className="mt-2 space-y-2"
+                            onClick={(e) => e.preventDefault()}
+                          >
+                            <p className="text-xs text-muted-foreground">
+                              Escribe el horario completo tal como aparece en el portal (al hacer hover).
+                            </p>
+                            <div className="flex flex-col sm:flex-row gap-2">
+                              <Input
+                                autoFocus
+                                value={editValue}
+                                onChange={(e) => setEditValue(e.target.value)}
+                                placeholder="Ej: MoWe 8:30AM - 9:59AM"
+                                className="h-8 text-sm"
+                              />
+                              <div className="flex gap-2">
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  className="h-8"
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    saveSchedule(cls.crn);
+                                  }}
+                                >
+                                  Guardar
+                                </Button>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-8"
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    cancelEditing();
+                                  }}
+                                >
+                                  Cancelar
+                                </Button>
+                              </div>
+                            </div>
+                            {editError && (
+                              <p className="text-xs text-destructive">{editError}</p>
+                            )}
+                          </div>
                         )}
                       </div>
                     </label>

@@ -112,24 +112,18 @@ function splitDays(daysString: string): string[] {
   return dias;
 }
 
-function createClassesFromTabular(info: TabularClassInfo): Class[] {
-  // El portal recorta los horarios largos con "..." (el resto de los días solo
-  // se ven en el hover y NO se copian). Marcamos esas clases como incompletas.
-  const incompleteSchedule = info.schedule.includes('...');
-
-  // Tomar TODOS los bloques "Días Hora - Hora" presentes (no solo el primero).
-  // Ej: "MoWe 8:30AM - 9:59AM Fr 1:00PM - 2:29PM" -> dos bloques.
-  const scheduleText = info.schedule.replace(/\.\.\./g, ' ');
+// Extrae los bloques "Días Hora - Hora" de un texto de horario, agrupando los
+// días que comparten el mismo rango horario. Ej:
+//   "MoWeFr 10:00AM - 11:29AM"            -> [{dias:[Lun,Miérc,Vier], 10:00AM, 11:29AM}]
+//   "MoWe 8:30AM - 9:59AM Fr 1:00PM-2:29PM" -> [{..8:30..}, {..1:00..}]
+export function parseScheduleSegments(
+  schedule: string
+): { dias: string[]; horaInicio: string; horaFin: string }[] {
+  const scheduleText = schedule.replace(/\.\.\./g, ' ');
   const segmentRegex = /([A-Za-z]+)\s+(\d{1,2}:\d{2}(?:AM|PM))\s*-\s*(\d{1,2}:\d{2}(?:AM|PM))/g;
-  const segments = [...scheduleText.matchAll(segmentRegex)];
 
-  if (segments.length === 0) {
-    return [];
-  }
-
-  // Agrupar los días por rango de horario idéntico (caso común: un solo rango)
   const byTime = new Map<string, { horaInicio: string; horaFin: string; dias: string[] }>();
-  for (const seg of segments) {
+  for (const seg of scheduleText.matchAll(segmentRegex)) {
     const dias = splitDays(seg[1]);
     if (dias.length === 0) continue;
     const key = `${seg[2]}-${seg[3]}`;
@@ -140,7 +134,18 @@ function createClassesFromTabular(info: TabularClassInfo): Class[] {
     byTime.set(key, entry);
   }
 
-  if (byTime.size === 0) {
+  return [...byTime.values()];
+}
+
+function createClassesFromTabular(info: TabularClassInfo): Class[] {
+  // El portal recorta los horarios largos con "..." (el resto de los días solo
+  // se ven en el hover y NO se copian). Marcamos esas clases como incompletas.
+  const incompleteSchedule = info.schedule.includes('...');
+
+  // Tomar TODOS los bloques "Días Hora - Hora" presentes (no solo el primero).
+  const segments = parseScheduleSegments(info.schedule);
+
+  if (segments.length === 0) {
     return [];
   }
 
@@ -172,7 +177,7 @@ function createClassesFromTabular(info: TabularClassInfo): Class[] {
 
   const materia = `${info.code} - ${info.title}`;
 
-  return [...byTime.values()].map(t => ({
+  return segments.map(t => ({
     materia,
     grupo: info.section,
     crn: info.section,
