@@ -27,34 +27,28 @@ function parseTabularFormat(text: string): Class[] {
   const lines = text.split('\n').filter(line => line.trim() !== '');
   const classes: Class[] = [];
   const seenClasses = new Set<string>(); // Para evitar duplicados
-  
+
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i].trim();
-    
-    // Saltar headers y líneas irrelevantes
+
     if (isHeaderLine(line) || isIrrelevantLine(line)) {
       continue;
     }
-    
-    // Buscar líneas con código de materia (ej: "R MLING2232019", "E MLHUM2229298")
-    const codeMatch = line.match(/^(?:Select\s+\w+:\s+[^	]+\s+)?([RE])\s+([A-Z]{2,}[\d]+)\s+(.+)/);
-    
-    if (codeMatch) {
-      const classInfo = parseTabularLine(line);
-      if (classInfo) {
-        // Crear identificador único
-        const uniqueKey = `${classInfo.code}-${classInfo.section}-${classInfo.schedule}`;
-        
-        if (!seenClasses.has(uniqueKey)) {
-          seenClasses.add(uniqueKey);
-          
-          const parsedClasses = createClassesFromTabular(classInfo);
-          classes.push(...parsedClasses);
-        }
-      }
+
+    const classInfo = parseTabularLine(line);
+    if (!classInfo) {
+      continue;
     }
+
+    const uniqueKey = `${classInfo.code}-${classInfo.section}-${classInfo.schedule}`;
+    if (seenClasses.has(uniqueKey)) {
+      continue;
+    }
+    seenClasses.add(uniqueKey);
+
+    classes.push(...createClassesFromTabular(classInfo));
   }
-  
+
   return classes;
 }
 
@@ -73,66 +67,34 @@ interface TabularClassInfo {
 }
 
 function parseTabularLine(line: string): TabularClassInfo | null {
-  // El formato puede venir separado por tabs o múltiples espacios
-  // Intentamos extraer los campos del texto
-  
-  // Remover prefijo "Select MLING...: Title" si existe
-  let cleanLine = line;
-  const selectMatch = line.match(/^Select\s+\w+:\s+[^	]+\t(.+)/);
-  if (selectMatch) {
-    cleanLine = selectMatch[1];
+  // Dividir en celdas por tabs; si no hay tabs, usar 2+ espacios como separador
+  let cells = line.split('\t').map(c => c.trim()).filter(Boolean);
+  if (cells.length < 4) {
+    cells = line.split(/\s{2,}/).map(c => c.trim()).filter(Boolean);
   }
-  
-  // Buscar patrón: [R/E] CODE Title Section Schedule Credits Campus Building Location Instructor ...
-  // El formato parece ser: R MLING2232019	Ética Profesional	1721	MoWe 7:00AM - 8:29AM	6.00	UPANA	...
-  
-  // Intentar dividir por tabs primero
-  let parts = cleanLine.split('\t').map(p => p.trim()).filter(p => p);
-  
-  // Si no hay suficientes partes con tabs, intentar con espacios múltiples
-  if (parts.length < 5) {
-    // Buscar el patrón directamente
-    const directMatch = cleanLine.match(/([RE])\s+(\w+)\s+(.+?)\s+(\d{3,4})\s+([A-Za-z]{2,}[A-Za-z\s]*\d{1,2}:\d{2}(?:AM|PM)\s*-\s*\d{1,2}:\d{2}(?:AM|PM)(?:\.\.\.)?)\s+(\d+\.\d+)\s+(\w+)\s+(.+?)\s+([A-Z][a-záéíóú]+(?:\s+[A-Z][a-záéíóú]+)*(?:\s+[a-z]+\s+[a-z]+)?(?:,\s*[A-Z][a-záéíóú]+(?:\s+[A-Z][a-záéíóú]+)*)*)/i);
-    
-    if (directMatch) {
-      return {
-        code: directMatch[2],
-        title: directMatch[3],
-        section: directMatch[4],
-        schedule: directMatch[5],
-        credits: directMatch[6],
-        campus: directMatch[7],
-        building: '*various*',
-        location: 'Mixcoac',
-        instructor: directMatch[9] || 'Por asignar',
-        status: 'Available',
-        availability: ''
-      };
-    }
-    
+
+  // Localizar la celda "R CODE" / "E CODE" (columna Add+Code), sin importar si
+  // hay una celda "Select ...:" antes. El código puede terminar en letra (ej. MLIN2133886L).
+  const codeIdx = cells.findIndex(c => /^[RE]\s+[A-Z]{2,}\d[A-Z0-9]*$/.test(c));
+  if (codeIdx === -1) {
     return null;
   }
-  
-  // Extraer tipo (R o E) y código del primer campo
-  const firstPart = parts[0];
-  const typeCodeMatch = firstPart.match(/([RE])\s+(\w+)/);
-  
-  if (!typeCodeMatch) {
-    return null;
-  }
-  
+
+  const code = cells[codeIdx].replace(/^[RE]\s+/, '');
+  const get = (offset: number): string => cells[codeIdx + offset] ?? '';
+
   return {
-    code: typeCodeMatch[2],
-    title: parts[1] || '',
-    section: parts[2] || '',
-    schedule: parts[3] || '',
-    credits: parts[4] || '',
-    campus: parts[5] || '',
-    building: parts[6] || '',
-    location: parts[7] || '',
-    instructor: parts[8] || 'Por asignar',
-    status: parts[10] || '',
-    availability: parts[11] || ''
+    code,
+    title: get(1),
+    section: get(2),
+    schedule: get(3),
+    credits: get(4),
+    campus: get(5),
+    building: get(6),
+    location: get(7),
+    instructor: get(8) || 'Por asignar',
+    status: get(10),
+    availability: get(11),
   };
 }
 
