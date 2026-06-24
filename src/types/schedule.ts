@@ -9,6 +9,7 @@ export interface Class {
   profesor: string;
   modalidad: string;
   selected?: boolean;
+  incompleteSchedule?: boolean;
 }
 
 export interface TimeSlot {

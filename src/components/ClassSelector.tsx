@@ -6,7 +6,7 @@ import { Checkbox } from './ui/checkbox';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 import { Input } from './ui/input';
-import { CheckCircle, Clock, MapPin, User, Users, ArrowLeft, Search } from 'lucide-react';
+import { CheckCircle, Clock, MapPin, User, Users, ArrowLeft, Search, AlertTriangle } from 'lucide-react';
 
 interface ClassSelectorProps {
   groupedClasses: GroupedClasses;
@@ -143,6 +143,8 @@ export function ClassSelector({ groupedClasses, onSelectionChange, onGenerateSch
                       className={`flex items-start gap-3 p-4 rounded-lg border cursor-pointer transition-colors ${
                         isSelected
                           ? 'border-primary bg-primary/5'
+                          : cls.incompleteSchedule
+                          ? 'border-amber-500/50 bg-amber-500/5 hover:border-amber-500'
                           : 'border-border bg-muted/30 hover:border-primary/40'
                       }`}
                     >
@@ -168,6 +170,15 @@ export function ClassSelector({ groupedClasses, onSelectionChange, onGenerateSch
                           >
                             {cls.modalidad}
                           </Badge>
+                          {cls.incompleteSchedule && (
+                            <Badge
+                              variant="outline"
+                              className="gap-1 border-amber-500 text-amber-600"
+                            >
+                              <AlertTriangle className="h-3 w-3" />
+                              Horario incompleto
+                            </Badge>
+                          )}
                         </div>
                         
                         <div className="grid sm:grid-cols-3 gap-3 text-sm">
@@ -186,6 +197,13 @@ export function ClassSelector({ groupedClasses, onSelectionChange, onGenerateSch
                             <span className="truncate">{cls.profesor}</span>
                           </div>
                         </div>
+
+                        {cls.incompleteSchedule && (
+                          <p className="mt-2 text-xs text-amber-600">
+                            El portal recortó este horario; puede faltar otro día.
+                            Verifícalo antes de confiar en la combinación.
+                          </p>
+                        )}
                       </div>
                     </label>
                     );

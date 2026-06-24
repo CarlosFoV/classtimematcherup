@@ -98,40 +98,52 @@ function parseTabularLine(line: string): TabularClassInfo | null {
   };
 }
 
-function createClassesFromTabular(info: TabularClassInfo): Class[] {
-  const classes: Class[] = [];
-  
-  // Parsear el horario - puede tener múltiples días
-  // Formato: "MoWe 7:00AM - 8:29AM" o "TuWeTh 10:00AM - 11:29AM" o con "..."
-  const schedule = info.schedule.replace(/\.\.\./, '').trim();
-  
-  // Extraer días y horario
-  const scheduleMatch = schedule.match(/^([A-Za-z]+)\s+(\d{1,2}:\d{2}(?:AM|PM))\s*-\s*(\d{1,2}:\d{2}(?:AM|PM))/);
-  
-  if (!scheduleMatch) {
-    return classes;
-  }
-  
-  const daysString = scheduleMatch[1];
-  const horaInicio = scheduleMatch[2];
-  const horaFin = scheduleMatch[3];
-  
+function splitDays(daysString: string): string[] {
   // Separar días individuales (MoWe -> [Mo, We], TuWeTh -> [Tu, We, Th])
   const dayPatterns = ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'];
   const dias: string[] = [];
-  
-  let remainingDays = daysString;
+  let remaining = daysString;
   for (const day of dayPatterns) {
-    if (remainingDays.includes(day)) {
+    if (remaining.includes(day)) {
       dias.push(convertDayToSpanish(day));
-      remainingDays = remainingDays.replace(day, '');
+      remaining = remaining.replace(day, '');
     }
   }
-  
-  if (dias.length === 0) {
-    return classes;
+  return dias;
+}
+
+function createClassesFromTabular(info: TabularClassInfo): Class[] {
+  // El portal recorta los horarios largos con "..." (el resto de los días solo
+  // se ven en el hover y NO se copian). Marcamos esas clases como incompletas.
+  const incompleteSchedule = info.schedule.includes('...');
+
+  // Tomar TODOS los bloques "Días Hora - Hora" presentes (no solo el primero).
+  // Ej: "MoWe 8:30AM - 9:59AM Fr 1:00PM - 2:29PM" -> dos bloques.
+  const scheduleText = info.schedule.replace(/\.\.\./g, ' ');
+  const segmentRegex = /([A-Za-z]+)\s+(\d{1,2}:\d{2}(?:AM|PM))\s*-\s*(\d{1,2}:\d{2}(?:AM|PM))/g;
+  const segments = [...scheduleText.matchAll(segmentRegex)];
+
+  if (segments.length === 0) {
+    return [];
   }
-  
+
+  // Agrupar los días por rango de horario idéntico (caso común: un solo rango)
+  const byTime = new Map<string, { horaInicio: string; horaFin: string; dias: string[] }>();
+  for (const seg of segments) {
+    const dias = splitDays(seg[1]);
+    if (dias.length === 0) continue;
+    const key = `${seg[2]}-${seg[3]}`;
+    const entry = byTime.get(key) ?? { horaInicio: seg[2], horaFin: seg[3], dias: [] };
+    for (const d of dias) {
+      if (!entry.dias.includes(d)) entry.dias.push(d);
+    }
+    byTime.set(key, entry);
+  }
+
+  if (byTime.size === 0) {
+    return [];
+  }
+
   // Limpiar nombre del instructor
   let instructor = info.instructor;
   if (instructor.includes('Pendiente de Asignar') || instructor.includes('Personal')) {
@@ -144,7 +156,7 @@ function createClassesFromTabular(info: TabularClassInfo): Class[] {
       instructor = `${nameParts[1]} ${nameParts[0]}`;
     }
   }
-  
+
   // Determinar el aula
   let aula = info.building;
   if (aula === '*various*' || !aula) {
@@ -157,24 +169,22 @@ function createClassesFromTabular(info: TabularClassInfo): Class[] {
       aula = `${buildingParts[1]} de ${buildingName}`;
     }
   }
-  
-  // Crear el nombre de la materia con el código
+
   const materia = `${info.code} - ${info.title}`;
-  
-  classes.push({
+
+  return [...byTime.values()].map(t => ({
     materia,
     grupo: info.section,
     crn: info.section,
-    dias,
-    horaInicio,
-    horaFin,
+    dias: t.dias,
+    horaInicio: t.horaInicio,
+    horaFin: t.horaFin,
     aula,
     profesor: instructor,
     modalidad: 'Presencial',
-    selected: false
-  });
-  
-  return classes;
+    selected: false,
+    incompleteSchedule,
+  }));
 }
 
 function convertDayToSpanish(day: string): string {
